@@ -183,3 +183,135 @@ findViewById(R.id.remove_button).setOnClickListener{
 * 사실, 액티비티와 마찬가지로 프래그먼트도 재생성됩니다. 그렇다면 프래그먼트를 재생성할 때 초깃값은 어떻게 하는지가 문제로 남습니다.
 * 이 문제는 Fragment.setArguments(Bundle)로 초깃값을 설정함으로써 해결할 수 있습니다. 재생성 시에는 getArguments()를 호출해 설정한 값을 가져올 수 있습니다.
 * 팩토리 메서드를 사용해 프래그먼트를 생성하는 방법은 모범 답안 중 하나이므로 관용구처럼 기억해 두면 좋습니다.
+~~~kotlin
+private val ARG_NO: String = "ARG_NO"
+
+~ 생략 ~
+
+fun getInstance(no: Int): MyFragment{
+    var fragment = MyFragment()
+    var args = Bundle()
+    args.putInt(ARG_NO, no)
+    fragment.setArguments(args)
+    return fragment
+}
+
+override fun onViewCreated(view: View, savedInstanceState: Bundle){
+    super.onViewCreated(vieew, savedInstanceState)
+    var textView: TextView  = view.findViewById(R.id.text)
+    // getArguments()를  통해 초깃값을 구함
+    var no: Int = getArguments().getInt(ARG_NO, 0)
+    var text: String = "" + no + "번째 프래그먼트"
+    Log.d("MyFragment", "onViewCreated " + text)
+    textView.setText(text)
+}
+~~~
+
+### 중첩 프래그먼트를 이용하자
+* 프래그먼트 안에 프래그먼트를 넣는 중첩 프래그먼트에 관해 알아보겠습니다. 중첩 프래그먼트는 처음에는 지원되지 않았지만 지원 라이브어리 쪽에서 대응해 현재는 안드로이드 1.6 이상에서 이용할 수 있게 되었습니다.
+* 단, 중첩 프래그먼트를 이용하면 코드가 상당히 복잡해지고 구현 난도가 높아집니다. 가능하면 커스텀 뷰로의 대체 등을 검토해보세요.
+* 또한 중첩 프래그먼트는 레이아웃 XML로 추가할 수 없고, 항상 동적으로 추가해야 합니다. 부모 프래그먼트 쪽에서는 기본적으로 UI를 가지지 않고 자식 프래그먼트 관리를 중심으로 하는 편이 좋습니다.
+* 역할을 명확히 나눔으로써 복잡성이 줄고 동작의 예측이 가능해지기 때문입니다.
+* 아까 예제와 마찬가지로 추가, 삭제 버튼을 눌러서 추가하고 삭제할 수 있는 예제입니다. 이번 예제에서는 부모인 ParentFragment에 자신인 ChildFragment가 추가돼갑니다.
+* 중첨 프래그먼트를 다룰 때는 getSupportFragmentManager()가 아니라 getChildFragmentManager()를 사용합니다.
+~~~kotlin
+fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    super.onViewCreated(view, savedInstanceState)
+    
+    view.findViewById(R.id.add_button).setOnClickListener{
+        var childFragmentManager: FragmentManager = getChildFragmentManager()
+        childFragmentManager.beginTransaction()
+            .add(R.id.fragment_container, ChildFragment.getInstance(mNumber))
+            .addToBackStack(null)
+            .commit()
+    }
+
+    view.findViewById(R.id.remove_button).setOnClickListener{
+        if(mNumber == 0) {
+            return
+        }
+        var childFragmentManager: FragmentManager = getChildFragmentManager()
+        childFragmentManager.popBackStack()
+    }
+}
+~~~
+* 중첩된 프래그먼트의 백스택도 중첩되지 않은 프래그먼트처럼 사용할 수 있지만 단 한 가지 다른 점이 있습니다. 바로 뒤로가기 키의 처리는 해주지 않는다는 점입니다.
+* 뒤로가기 키가 눌렸을 때 부모 프래그먼트의 백스택을 확인합니다. 만약 백스택이 있으면 popBackStack()할 필요가 있습니다.
+~~~kotlin
+override fun onBackPressed() {
+    var fragmentManager: FragmentManager = getSupportFragmentManager()
+    var parentFragment: Fragment = fragmentManager.findFragmentByTag(TAG_PARENT)
+    // 부모 프래그먼트의 백스택을 체크
+    if(parentFragment != null && parentFragment.getChildFragmentManager().getBackStackEntryCount() > 0) {
+        parentFragment.getChildFragmentManager().popBackStack()
+    } else {
+        super.onBackPressed()
+    }
+}
+~~~
+### UI를 갖지 않는 프래그먼트를 이용하자
+* UI를 갖지 않는 프래그먼트를 만들 수 있습니다. 이런 프래그먼트를 헤드리스 프래그먼트라고 합니다. 기본 액티비티 클래스로서 BaseActivity를 만들고, 거기에 액티비티의 공통된 처리를 구현하는 경우가 있습니다.
+* 그러한 공통 처리에서 UI와 연결되지 않은 부분을 헤드리스 프래그먼트로서 구현할 수 있습니다. 여기서는 네트워크 연결 확인 및 네트워크 연결 변경 감지를 프래그먼트로 구현합니다.
+* 헤드리스 프래그먼트는 UI와 연결하지 않으니 화면 회전 등 설정이 변경되더라도 프래그먼트를 재생성할 필요가 없습니다. setRetainInstance(true)를 호출해 재생성되지 않게 합니다.
+~~~kotlin
+override fun onCreate(savedInstanceState: Bundle?){
+    super.onCreate(savedInstanceState)
+    setRetainInstance(true)
+}
+~~~
+* 또한 프래그먼트는 재생성되지 않지만 액티비티는 재생성됩니다. 이 때 Activity.onCreate()가 다시 콜백되므로 액티비티에 맞춰 프래그먼트를 생성하지 않도록 막아 둡시다.
+~~~kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    setContentView(R.layout.activity_main)
+
+    // NetworkCheckFragment에서 정의한 TAG(문자열)로 프래그먼트가 추가됐는지 체크
+    mFragment = (NetworkCheckFragment) getSupportFragmentManager().findFragmentByTag(NetworkCheckFragment.TAG)
+    if(mFragment == null){
+        mFragment = mFragment.newInstance()
+        getSupportFragmentManager().beginTransaction()
+        .add(mFragment, NetworkCheckFragment.TAG) // TAG를 지정해서 추가
+        .commit()
+    }
+}
+~~~
+* 아울러 프래그먼트를 추가할 때 UI를 갖지 않는 경우 ViewGroup의 레이아웃 ID는 지정할 필요가 없습니다. 네트워크 변경을 감지하고 통지하는 데는 다음에 설명할 BroadcastReceiver와 LocalBroadcastManager를 이용했습니다.
+~~~kotlin
+class MyReceiver: BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        var i: Intent = Intent(NetworkCheckFragment.ACTION_CHECK_INTERNET)
+        i.putExtra(NetworkCheckFragment.KEY_CHECK_INTERNET, 
+            NetworkCheckFragment.isInternetConnected(context))
+        // 연결 변경 알림
+        LocalBroadcastManager.getInstance(context).sendBroadcast(i)
+    }
+}
+~~~
+* 네트워크 변경이 감지되면 MyReceiver에서 LocalBroadcastManager로 통지합니다. 그 통지를 NetworkFragment 쪽에서 받아서 공통 처리를 구현할 수 있습니다. 이번에는 Toast를 표시합니다.
+~~~kotlin
+class NetworkCheckFragment: Fragment() {
+    val TAG: String = NetworkCheckFragment.class.getSimpleName()
+    val ACTION_CHECK_INTERNET = "ACTION_CHECK_INTERNET"
+    val KEY_CHECK_INTERNET = "KEY_CHECK_INTERNET"
+
+    ~ 생략 ~
+
+    var mReceiver = BroadcastReceiver() {
+        override onReceiver(context: Context, intent: Intent) {
+            var action: String = intent.getAction()
+            if(ACTION_CHECK_INTERNET.equals(action)) {
+                // 네트워크 연결 변경에 따른 공통 처리
+                var isConnected: Boolean = itent.getBooleanExtra(KEY_CHECK_INTERNET,false)
+                if(isConnected) {
+                    // 인터넷 연결이 있는 경우
+                    Toast.makeText(context, "인터넷 연결 있음", Toast.LENGTH_SHORT).show()
+                } else {
+                    // 인터넷 연결이 없는 경우
+                    Toast.makeText(context, "인터넷 연결 없음", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+}
+~~~
+* 동작을 확인하려면 네트워크 연결을 껐다 켜세요. Wi-Fi를 켰다가 다시 꺼보세요. 몇 초 기다리면 Toast가 표시됩니다.
