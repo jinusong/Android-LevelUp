@@ -16,3 +16,15 @@ var cr: ContentResolver = getContentResolver()
 ~~~kotlin
 fun query(uri: Uri, projection: String[], selection: String, selectionArgs: String[], sortOrder: String): Cursor
 ~~~
+* query 메서드의 인수는 조금 복잡하므로 다음 표로 정리했습니다.
+
+|인수|내용|
+|---|----|
+|uri|ContentProvider가 관리하는 uri|
+|projection|가져오고 싶은 칼럼명(select에 해당)|
+|selection|필터링할 칼럼명을 지정(where)|
+|selectionArgs|selection으로 지정한 칼럼명의 조건을 설정(프리페어드 스테이트먼트에 해당)|
+|sortOrder|정렬하고 싶은 칼럼명을 지정(order by에 해당|
+* query()의 반환값인 Cursor란 어떤 것일까요? Cursor란 데이터에 접근하는 포인터입니다. 2차원 표를 떠올리면 이해하기 쉽습니다.
+### MediaStore에서 이미지를 가져온다
+* 이번에는 '갤러리'앱에서 이용되는 이미지를 저장하는 ContentProvider에서 이미지를 가져와 봅시다. 
