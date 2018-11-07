@@ -28,3 +28,18 @@ fun query(uri: Uri, projection: String[], selection: String, selectionArgs: Stri
 * query()의 반환값인 Cursor란 어떤 것일까요? Cursor란 데이터에 접근하는 포인터입니다. 2차원 표를 떠올리면 이해하기 쉽습니다.
 ### MediaStore에서 이미지를 가져온다
 * 이번에는 '갤러리'앱에서 이용되는 이미지를 저장하는 ContentProvider에서 이미지를 가져와 봅시다. 
+* 우선 MediaStore에서 이미지를 가져오는 가져오는 부분을 살펴봅니다. ContentProvider에 접근할 때 기본적으로 다른 앱이 이용할 수 있도록 필요한 상수는 정의돼 있습니다.
+* Authority를 나타내는 Uri는 보통 CONTENT_URI, EXTERNAL_CONTENT_URI같은 상수명으로 공개됩니다.
+* 또한 가져오고 싶은 칼럼명도 마찬가지로 정의돼 있으므로 이를 이용합니다. 우선 필요한 projection 등을 기술하고, ContentResolver.query()를 호출해 Cursor를 가져옵니다.
+~~~kotlin
+private fun getImage(): Cursor {
+    var contentResolver: ContentResolver = getContentResolver()
+    var queryUri: Uri = Media.EXTERNAL_CONTENT_URI
+
+    var projection = arrayof{ ImageColums._ID, ImageColums.TITLE, ImageColums.DATE_TAKEN,}
+
+    var sortOrder: String = ImageColumns.DATE_TAKEN + " DESC"
+    queryUri = queryUri.buildUpon().appendQueryParameter("limit", "1").build()
+    return contentResolver.query(queryUri,  projection, null, null, sortOrder)
+}
+~~~
