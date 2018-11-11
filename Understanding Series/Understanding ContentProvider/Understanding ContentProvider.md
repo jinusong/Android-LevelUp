@@ -43,3 +43,44 @@ private fun getImage(): Cursor {
     return contentResolver.query(queryUri,  projection, null, null, sortOrder)
 }
 ~~~
+* MediaStore는 공개된 인터페이스가 중첩돼 있어 코드가 길어지므로 여기서는 static 임포트를 이용합니다. 중첩된 내부 클래스와 인터페이스에 접근할 때 깔끔하게 만들 수 있습니다.
+~~~kotlin
+import static android.provider.MediaStore.Images.ImageColumns
+import static android.provider.MediaStore.Images.Media
+~~~
+### Cursor로부터 데이터를 가져오는 방법
+* 우선 가져온 Cursor를 통해 데이터에 접근합니다.
+~~~kotlin
+var cursor: Cursor = getImage()
+if(cursor.moveToFirst()) {
+    // 1. 각 칼럼의 열 인덱스 취득
+    var idColNum: Int = cursor.getColumnIndexOrThrow(ImageColumns._ID)
+    var titleColNum: Int = cursor.getColumnIndexOrThrow(ImageColumns.TITLE)
+    var dateTakenColNum: Int = cursor.getColumnIndexOrThrow(ImageColumns.DATE_TAKEN)
+
+
+    // 2. 인데스를 바탕으로 데이터를 Cursor로부터 취득
+    var id: Long = cursor.getLong(idColNum)
+    var title: String = cursor.getString(titleColNum)
+    var dateTaken: Long = cursor.getLong(dataTakenColNum)
+    var imageUri: Uri = ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, id)
+
+    // 3. 데이터를 View로 설정
+    var textView: TextView = findViewById(R.id.textView)
+    var imageView: ImageView = findViewById(R.id.imageView)
+    var calendar: Calendar =  Calendar.getInstance()
+    calendar.setTimeInMillis(dateTaken)
+    var text: String = DateFormat.format("yyyy/MM/dd(E) kk:mm:ss", calendar).toString()
+    textView.setText("촬영일시: " + text)]
+    imageView.setImageURI(imageUri)
+}
+cursor.close()
+~~~
+* 처음에 Cursor.moveToFirst()를 호출해 커서를 맨 앞으로 이동합니다. true가 반환된 경우에만 Cursor에서 데이터를 가져옵니다. 
+* false가 반환된 경우는 데이터가 비었으므로 그 이후의 처리는 필요 없습니다.
+* Cursor로부터 데이터를 가져오라면 두 단계가 필요합니다. 우선 처음에 가져오고 싶은 칼럼의 인덱스를 얻습니다.
+* 그리고 다음으로 Cursor.getString(Int)를 호출해 데이터를 가져옵니다. 문자열인 경우는 getString(), 숫자인 경우 getInt() 등 자료형에 따른 메서드가 준비돼 있습니다.
+* 아울러 인수에는 가져오고 싶은 칼럼의 인덱스를 전달합니다.
+* Cursor의 사용이 끝나면 close()를 호출합니다. Cursor는 ContentProvider로부터 가져온 데이터에 대한 참조를 가지고 있으므로 닫아서 참조하는 데이터를 해제할 필요가 있습니다.
+
+### ContentProvider에서 데이터를 가져오는 흐름
