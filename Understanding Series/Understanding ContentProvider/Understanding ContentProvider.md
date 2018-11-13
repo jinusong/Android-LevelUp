@@ -218,9 +218,134 @@ companion object {
 ~~~kotlin
 override fun query: Cursor(uri: Uri, projection: Array<String>, selection: String, selectionArgs: Array<String>, sortOrder: String){
     var cursor: Cursor? = null
-    switch(sUriMatcher.match(uri)) {
-        case ROW_DIR:
+    whensUriMatcher.match(uri)) {
+        ROW_DIR ->
             Log.d(TAG, "query(dir) uri=" + uri.toString)
+            synchronized(mDbHelper){
+                var id: Long = ContentUris.parseId(uri)
+                var db: SQLiteDatabase = mDbHelper.getWritableDatabase()
+                cursor = db.query(TABLE_NAME, projection, _ID, Arrayof(Long.toString(id)), null, null, null)
+            }
+        else ->
+        throw IllegalArgumentException("인수의 URI가 틀렸습니다.")
+    }
+    return cursor
+}
+~~~
+
+### insert() 메서드 구현
+* query() 메서드와 마찬가지로 SQLiteDatabase를 가져와 SQLiteDatabase.insert()를 호출합니다. 또한 미리 UriMatcher로 나눕니다.
+* 두 번째 인수인 ContentValues는 키-값 형식의 데이터 구조입니다. 삽입 후, 데이터에 발생한 변경을 알리기 위해 ContentResolver.notifyChange()를 호출합니다.
+~~~kotlin
+override fun insert(uri: Uri, values: ContentValues): Uri{
+    resultUri = null;
+    when(sUriMatcher.match(uri)) {
+        ROW_DIR  -> 
+        synchronized(mDbHelper) {
+            var db: SQLiteDatabase = mDbHelper.getWritableabase()
+            var lastId: Long = db.insert(TABLE_NAME, null, values)
+            resultUri = ContentUris.withAppendedId(uri, lastId)
+            Log.d(TAG, "WordsOfTodayProvider insert " + values)
+            getContext().getContentResolver().notifyChange(resultUri, null)
+        }
+        else -> 
+            throw IllegalArgumentException("인수의 URI가 틀렸습니다.")
+    }
+    return resultUri
+}
+~~~
+* ContentValues에 관해 보충하겠습니다. ContentValues는 ContentProvider에 데이터를 추가하거나 갱신 등을 할 때 다루는 데이터 구조입니다.
+* 키-값 쌍으로 돼 있고 내부적으로 HashMap<String, Object>를 래핑한 것입니다. 덧붙여, ContentProvider는 프로세스 간 통신에서 데이터를 주고 받을 수 있으므로 ContentValues는 Parcelable을 구현하고 있어 값으로 설정할 수 있는 것도 Parcelable일 필요가 있습니다.
+* 다음처럼 인수로 넘어온 ContentValues로 데이터를 삽입합니다. 아울러 위 코드에는 포함되지 않았지만 ContentValues로부터 값을 가져올 때는 getAsInteger(), getAsString() 등 값의 자료형에 맞게 메서드를 호출합니다.
+* 이러한 메서드는 호출한 메서드와 실제로 가져오는 값의 자료형이 맞지 않는 경우(내부적으로 ClassCastException이 발생) 단순히 null을 반환합니다.
+### getType() 메서드 구현
+* WordsOfToday라는 데이터 구조의 한 종류이므로 Uri와 일치하면 WordsOfToday Contract에서 정의한 MIME 타입을 반환합니다. 
+* ROW_DIR인 경우는 MIME_TYPE_DIR(vnd.android.cursor.dir/)을 반환하고, ROW_ITEM인 경우 MIME_TYPE_ITEM(vnd.android.cursor.item/)을 반환합니다.
+~~~kotlin
+override fun getType(uri: Uri): String{
+    when(sUriMatcher.match(uri)){
+        ROW_DIR ->
+            return MIME_TYPE_DIR
+        ROW_ITEM ->
+            return MIME_TYPE_ITEM
+        else -> 
+            return null
     }
 }
 ~~~
+* update()와 delete()도 구현이 가능합니다.(여기서 설명하지는 않습니다.)
+
+### ContentProvider의 데이터 변화를 알려주는 ContentObserver
+* ContentProvider의 데이터가 변경됐을 때 어떻게 그 변경을 탐지하면 좋을까요? 
+* 정기적으로 폴링해서 매번 데이터가 변경됐는지 확인하는 비효율적인 방법도 있지만 그보다는 ContentProvider 프레임워크가 제공하는 메커니즘을 이용하면 편리합니다.
+* 코드를 보면 notifyChange(..)를 호출하는 곳이 있습니다. 이곳이 ContentObserver에 변경을 통지하는 부분입니다. ContentProvider를 직접 만들 때는 변경을 적절하게 통지하는 구현도 함께 합니다.
+
+~~~kotlin
+getContext().getContentResolver().notifyChange(uri, null)
+~~~
+* ContentObserver는 추상 클래스라서 반드시 onChange()라는 추상 메서드를 구현해야 합니다. 생성자에서 넘겨주는 Handler가 실제로 onChange()를 호출합니다.
+* 앱의 사양에 따라 어떻게 대응할지 달라지지만 변경된 데이터에 맞게 사용자에게 적절한 알림을 표시하거나 표시하는 UI를 갱신하고 또한 데이터를 다시 가져오는 등의 구현이 필요해집니다.
+* Loader에 관한 설명을 생략했지만 CursorLoader를 사용하는 경우는 내부적으로 ContentObserver를 이용하므로 데이터를 가져오는 ContentProvider의 데이터가 갱신되면 다시 데이터를 가져오게 돼 있습니다.
+~~~kotlin
+mObserver = ContentObserver(Handler()){
+    override fun onChange(selfChange: Boolean) {
+        super.onChange(selfChange)
+        // 데이터 변경이 있었음
+    }
+}
+~~~
+* ContentObserver의 등록 및 해제는 액티비티의 수명주기에 맞게 onStart()에서 등록하고 onStop()에서 해제합니다.
+~~~kotlin
+fun onStart() {
+    super.onStart()
+    // 두 번째 인수가 false인 경우 첫 번째 인수의 URI와 일치할 때만
+    // ContentObserver.onChange()를 호출
+    // true인 경우는 URI와 부분 일치
+    mContentResolver.registerContentObserver(WordsOfTodayProvider.CONTENT_URI, true, mObserver)
+}
+
+fun onStop() {
+    super.onStop()
+    mContentResolver.unregisterContentObserver(mObserver)
+}
+~~~
+### adb로 간단히 ContentProvider에 접속
+* ContentProvider를 간단히 확인하고 싶은 경우에는 터미널에서 adb shell의 content 커맨드를 사용합니다. 조금 전에 만든 '오늘의 한마디'의 ContentProvider에 접근합니다. 다음은 커맨드를 실행하는 예입니다.
+~~~
+// 전체 가져오기
+adb shell content query --uri content:://com.advanced_android.wordoftoday2/wordoftoday
+--projection _id:words:name
+~~~
+~~~
+// 하나만 가져오기(id지정)
+adb shell content query --uri content:://com.android_android.wordoftoday2/wordoftoday/0
+--projection _id:words:name
+~~~
+~~~
+// 목록 가져오기(필터링)
+adb shell content query --uri content:://com.advanced.android.wordoftoday2/wordoftoday/0
+--projection _id:words:name
+~~~
+~~~
+// 삽입
+adb shell content insert --uri content:://com.advanced_android.wordoftoday2/wordoftoday/
+--bind name:s:Shunsuke --bind date:i:20181113 --bind words:s:'오늘은 멋진날'
+~~~
+* 또한 데이터베이스를 확인할 때는 adb content 커맨드를 사용해도 좋지만 페이스북에서 개발한 Stetho를 이용하면 더욱 간단히 확인할 수 있습니다.
+~~~kotlin
+// Stetho 활성화
+if(BuildConfig.DEBUG) {
+    var context: Context = getApplicationContext()
+    Stetho.initializeWithDefaults(this)
+}
+~~~ 
+~~~gradle
+// Stetho 도입
+dependencies{
+    ~ 생략 ~
+    debugCompile 'com.facebook.stetho:stetho:1.4.1'
+}
+~~~
+* Stetho를 도입했습니다. Stetho로 데이터베이스를 살펴봅니다. Stetho에서는 SQL을 실행할 수 있으므로 앱 내에서 구현하기 전에 우선 여기서 시험해보고 구현하면 더 효율적으로 개발할 수 있습니다. 
+* 앱을 표시한 상태에서 단말기와 컴퓨터를 USB 케이블로 연결하고 크롬 브라우저 주소창에서 chrome://inspect/#device를 열어줍니다.
+* 그리고 [inspect]를 누르면 'Developer Tools'가 시작됩니다. 시작된 후에는 앱 내의 데이터베이스에 접근할 수 있습니다.
