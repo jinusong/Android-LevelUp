@@ -86,7 +86,7 @@ override fun onCreate(savedInstanceState: Bundle) {
 ## 비동기 처리를 간단하게 retrofit2에 응용해보기
 ### 모델 클래스
 ~~~kotlin
-class Contributor {
+class repoContributors {
     lateinit var login: String
     lateinit var html_url: String
     
@@ -148,7 +148,7 @@ class MainActivity: AppCompatActivity {
         button.setOnClickListener{ v -> 
             var gitHubService: GitHubService = GitHubService.retrofit.create(GitHubService::class.java)
             val call: Call<List<Contributor>> = gitHubService.repoContributors("square", "retrofit")
-            Network().execute(call)
+            NetworkCall.execute(call)
         }
     }
 
@@ -173,9 +173,11 @@ class MainActivity: AppCompatActivity {
 ~~~
 * 이렇게 바꿔줍니다.
 ### 비동기 방식
+* 다음은 이 비동기 과정을 하나에 다 담은 것입니다.
+* 그리고 retrofit은 execute(동기)와 enqueue(비동기)로 바꿀 수 있습니다.
 ~~~kotlin
 var gitHubService: GitHubService = GitHubService.retrofit.create(GitHubService::class.java)
-var call: Call<List<Contributor>> = gitHubService.repoContributors("square", "retrofit")
+val call: Call<List<Contributor>> = gitHubService.repoContributors("square", "retrofit")
 call.enqueue(Callback<List<Contributor>>(){
     override fun onResponse(call: Call<List<Contributor>>, response: Response<List<Contributor>>) {
         var textView: TextView  =  findViewById(R.id.textView)
@@ -229,7 +231,7 @@ Call<Test> createUser(@Field("token") token: String)
 * 밑 @POST부분을 추가하여 특정 값을 서버쪽으로 넘겨주는 메소드입니다.
 ~~~kotlin
 var gitHubService: GitHubService = GitHubService.retrofit.create(GitHubService::class.java)
-var call: Call<Test> = gitHubService.createUser("token")
+val call: Call<Test> = gitHubService.createUser("token")
 call.enqueue(Callback<Test>(){
     override fun onResponse(call: Call<Test>, response: Response<Test>) {
         // 성공
@@ -245,3 +247,43 @@ call.enqueue(Callback<Test>(){
 ### 동기 비동기 방식 차이
 * 동기(synchronous): 요청과 동시에 결과가 나타남. 특정함수를 선언하여 결과값을 즉시 return 받는 방식
 * 비동기(Aysnchronous): 요청과 동시에 결과가 나타나지 않음. 사용자는 요청을  하고 제어권을 다시 가짐. 간단하게 설명하면 요구 프로세스를 백그라운드에서 처리한다라고 이해하면 됩니다.
+
+### 번외 Retrofit2, GSON, okHttp 예제
+* 까먹고 GSON을 적용시키지 않았어요. 
+* 먼저 Retrofit의 구현체 만들기 부분을 만들어주고
+~~~kotlin
+fun RetrofitObject(): Retrofit{
+    return Retrofit.Builder()
+        .baseUrl(SEVER_URL).addConverterFactory(GsonConverterFactory.create()).build()
+}
+~~~
+* 실 구현하는 부분을 만들어줍니다.
+~~~kotlin
+fun createContentService(): ContentService{
+    return getRetrofitObject().create(ContentService::class.java)
+}
+~~~
+* 원래 팩토리 패턴은, 각 동작을 인터페이스나 클래스로 추상화하고,
+그 추상화된 동작의 구현체를 인스턴스화해서, 리턴해줘야 합니다.
+* 하지만 여기서는 그냥 구현체를 명시적으로 돌려주도록 만들었습니다.
+* 이 메소드를 사용하면 다음과 같이 액티비티나 리사이클러, 리스트뷰 등에서 팩토리 클래스의 메소드를 불러서 사용할 수 있습니다.
+~~~kotlin
+fun executeRetrofit() {
+    var tempList: Call<List<Content>> = createContentService().getContentList()
+    tempList.enqueue(Callback<List<Content>>() {
+        override fun onResponse(response: Response<List<Content>>, retrofit:  Retrofit){
+            if(response.isSuccess){
+                contentList.addAll(response.body())
+                mAdapter.notifyDataSetChanged()
+            } else {
+                Toast.maskText(getActivity(), "not success", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        override fun onFailure(t: Throwable) {
+            Toast.makeText(getActivity(), "on Failure", Toast.LENGTH_LONG).show()
+        }
+    })
+}
+~~~
+* 메인 스레드에서 이 메소드를 호출하면, Retrofit Factory에서 원하는 메소드를 호출하고, 다음으로 Call객체의 .enqueue 메소들을 호출합니다. 
