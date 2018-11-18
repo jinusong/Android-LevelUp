@@ -276,7 +276,7 @@ class SamplePresenter : SampleContract.Presenter {
 ## View 상속 정의
 * SampleContract.View를 상속받으면 다음과 같이 정의해주시면 되겠습니다.
 ~~~kotlin
-class SampleActivity : AppCompatActivity : SampleContract.View {
+class SampleActivity : AppCompatActivity(), SampleContract.View {
 
 	private var presenter: SampleContract.Presenter
 
@@ -339,7 +339,7 @@ class SamplePresenterImpl(val view: SamplePresenter.View) : SamplePresenter {
 * SamplePresenter인 SamplePresenterImpl을 초기화하여 사용합니다.
 * 사용법은 Contract을 통한 생성과 동일합니다.
 ~~~kotlin
-class SampleActivity : AppCompatActivity : SampleContract.View {
+class SampleActivity : AppCompatActivity(), SampleContract.View {
 
 	private var presenter: SamplePresenter
 
@@ -378,7 +378,7 @@ class SamplePresenter(val view: SampleView) {
 ~~~
 * 그리고 다음과 같이 View의 사용이 가능하게 됩니다.
 ~~~kotlin
-class SampleActivity: AppCompatActivity: SampleContract.View {
+class SampleActivity: AppCompatActivity(), SampleContract.View {
 
 	private var presenter: SamplePresenter
 
