@@ -386,7 +386,7 @@ class SampleActivity: AppCompatActivity: SampleContract.View {
 		super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-		presenter = new SamplePresenter(this)
+		presenter = SamplePresenter(this)
 
 		presenter.loadItem()
 	}
@@ -530,7 +530,7 @@ interface AdapterContract {
 ## Contract을 Adapter에 상속받아 구현
 * View/Model을 구분해서 Contract을 생성하였으니, Adapter에서 이를 상속받아서 구현해줍니다.
 ~~~kotlin
-class SampleAdapter : RecyclerView.Adapter(), AdapterContract.View, AdapterContract.Model {
+class SampleAdapter: RecyclerView.Adapter(), AdapterContract.View, AdapterContract.Model {
   // 생략
 }
 ~~~
@@ -538,16 +538,16 @@ class SampleAdapter : RecyclerView.Adapter(), AdapterContract.View, AdapterContr
 ## Presenter에서는?
 * Presenter에서는 AdapterContract.View와 AdapterContract.Model을 구현합니다.
 ~~~kotlin
-class SamplePresenter implement SampleContract.Presenter {
-  private AdapterContract.View adapterView;
-  private AdapterContract.Model adapterModel;
+class SamplePresenter: SampleContract.Presenter {
+  private var adapterView: AdapterContract.View
+  private var adapterModel: AdapterContract.Model
 
-  public void setAdapterView(AdapterContract.View adapterView) {
-    this.adapterView = adapterView;
+  fun setAdapterView(adapterView: AdapterContract.View) {
+    this.adapterView = adapterView
   }
 
-  public void setAdapterModel(AdapterContract.Model adapterModel) {
-    this.adapterModel = adapterModel;
+  fun setAdapterModel(adapterModel: AdapterContract.Model) {
+    this.adapterModel = adapterModel
   }
 }
 ~~~
@@ -555,3 +555,195 @@ class SamplePresenter implement SampleContract.Presenter {
 * 기존에서와 같이 View를 통해서 접근할 필요성이 없어집니다.
 * 그래서 다시 그리면 아래와 같습니다.
 ![AdapterModel](https://thdev.tech/images/posts/2016/12/Android-MVP-Four/mvp_adapter_contract.png)
+# AdapterContract View - OnClickListener 정의
+* OnClickListener 정의는 AdapterContract View에 추가 정의를 통해 간단하게 구현할 수 있습니다.
+* 기존 AdapterContract.View에는 다음과 같이 정의하였습니다.
+~~~kotlin
+interface ImageAdapterContract {
+    interface View {
+
+        fun notifyAdapter()
+
+    }
+}
+~~~
+* 여기에 setOnClickListener(OnClickListener listener) 정의를 추가함으로써 Presenter에서 바로 Adapter의 OnClickListener 이벤트를 전달받고, 이를 처리할 수 있게 됩니다.
+    * AdapterModel/AdapterView를 Presenter에서 들고 있기 때문에 굳이, View에서 이런 이벤트를 받을 필요는 없습니다.
+* 기존 그림에서 setOnClickListener 부분을 추가하였습니다.
+![setOnClickListener](https://thdev.tech/images/posts/2016/12/Android-MVP-Four-Three/mvp_01.png)
+## AdapterContract View를 통해서 초기화하는 이유는?
+* AdapterContract.View에서 OnClick을 초기화하고, 이를 ViewHolder에서 정의하는 이유는 다음과 같습니다.
+    * 이미 Presenter에서는 Adapter View/Model을 알고 있다.
+    * 실제 View/Model을 한 번에 가지고 있는 Adapter이기 때문에 이를 굳이 View에서 처리할 필요는 없다
+* 위와 같은 이유입니다.
+* 결국 다시 View에서 setOnClickListener을 하고, 이 이벤트를 받아서 Presenter에 넘겨서 처리를 하는 것보단, 바로 Presenter가 받아서 이를 처리하고, View 이벤트를 분리하는게 편리하다고 생각합니다.
+# Model 정의
+## Model이란?
+* Model은 Data를 말합니다.
+* 단순 데이터가 아닌 데이터를 관리/수집/수정 등을 하게 되는 부분입니다.
+* 데이터를 Cache해야 한다면 이 모델에서 Cache 할 수도 있고, 그냥 단순 데이터 전달만 할 수도 있습니다.
+## Google Architecture의 Model
+![Google Architecture](https://thdev.tech/images/posts/2016/12/Android-MVP-Model-One/mvp_model_01.png)
+* Repository : Remote/Local을 구분하며, Memory cache를 포함
+* Remote : 서버를 통한 데이터를 불러온다
+* Local : 단말기 상의 SQL, Realm 등을 통한 데이터를 불러온다
+## 구현한 모델은?
+* 현재까지 MVP에서 정의한 모델은 단순 리턴을 하며, Model만 구분을 해두었습니다.
+* 싱글톤을 통해서 데이터 클래스에 접근하도록 만들었습니다.
+* 데이터 형태에 따라서 여러 개가 만들어질 수도, 단일 클래스로 생성될 수도 있습니다.
+~~~kotlin
+object SampleImageData {
+    init{}
+    lateinit var sampleImageData: SampleImageData
+
+    fun getInstance(): SampleImageData {
+        if (sampleImageData == null) {
+            sampleImageData = SampleImageData()
+        }
+        return sampleImageData
+    }
+
+    fun getImages(context: Context, size: Int): ArrayList<ImageItem> {
+        var items: ArrayList<ImageItem> = ArrayList<>()
+        // 생략
+        return items
+    }
+}
+~~~
+## Presenter에서는?
+* 위에서 작성한 모델을 Presenter에서 셋팅하는 주체는 View입니다.
+* Presenter 초기화하는 대상이 View이기 때문에 View 초기화함과 동시에 Model을 초기화하게 됩니다
+~~~kotlin
+presenter = MainPresenter().apply {
+		view = this@MainActivity
+		imageData = ImageData
+		adapterModel = imageAdapter
+		adapterView = imageAdapter
+}
+~~~
+* 위와 같이 초기화를 하고, Presenter에서 다음과 같이 사용하게 됩니다.
+* getItems를 통해서 데이터를 불러오고 이를 사용하게 됩니다.
+~~~kotlin
+override fun loadItems(context: Context, isClear: boolean) {
+    var items: ArrayList<ImageItem> = sampleImageData.getImages(context, 10);
+    if (isClear) {
+        adapterModel.clearItem();
+    }
+    adapterModel.addItems(items);
+    adapterView.notifyAdapter();
+}
+~~~
+## Google Architecture의 Model
+* 구글 Architecture에서 설명하는 모델 정의를 살펴보려고 합니다.
+    * 가장 기본적인 Model 정의
+    * Loader을 추가한 Model 정의
+    * Clean 코드를 위한 정의 : Presenter Layout/Domain Layout/Data Layout 통해서 Clean 코드를 구현한다
+* 위와 같은 3가지 정도로 구분할 수 있는데 기본적인 Model을 정의해야 Loader/Clean 코드를 적용해 볼 수 있습니다.
+* 그래서 이번에는 Google Architecture의 가장 기본적인 Model 정의를 살펴보겠습니다.
+
+## Google Architecture Model
+* 구글에서 설명하고 있는 Model 정의는 아래와 같습니다.
+    * Repository : 로컬/서버 중 어떤 데이터를 불러올지 정의하고, 메모리 캐시를 포함한다.
+    * Remote data source : 서버에서 데이터를 받아온다
+    * Local data source : 로컬에서 데이터를 받아온다
+
+* 가장 기본적으로는 위와 같습니다. 로컬/서버에서 받아오는 데이터는 Repository에서 캐시 처리할 수 있습니다.
+
+* 필요에 따라서 캐시를 하고, 이를 Presenter에 다시 콜백을 해주게 됩니다.
+
+* RxJava로 구성을 하면 async/await 형태로 만들어지므로, return Observable/Flowable의 형태가 만들어질 수 있습니다.
+
+* 그래서 가장 basic MVP는 아래의 그림을 가집니다.
+![basic MVP](https://thdev.tech/images/posts/2017/01/Android-MVP-Model-Two/todo-mvp.png)
+* 여기에서 Repository이 왼쪽과 같이 표현될 수 있습니다.
+* Presenter와 Repository 사이의 데이터를 가공할 수 있는 Loader가 추가될 수도 있고, Clean 코드를 위한 Domain Layout이 포함될 수 있습니다.
+* 이런 Loader와 Domain Layout 정의는 clean 코드를 위한 정의입니다. 필요할 경우에 추가하여 사용이 가능해집니다.
+## TODO MVP
+* 모델의 정의는 다음과 같은 형태로 생성됩니다.
+
+    * Presenter 생성하는 위치에서 Repository 생성
+    * Presenter에서 Model(Repository) 포합(setter)
+    * Presenter에서 Model(Repository) 호출
+    * Model(Repository)는 Remote/Local의 데이터를 선택하고, 이를 캐쉬
+    * 데이터 호출이 완료되면 Loader 또는 Presenter에서 세팅한 Listener에 값을 전달
+* 추가로 Loader의 정의는 아래와 같습니다.
+![TODO MVP](https://thdev.tech/images/posts/2017/01/Android-MVP-Model-Two/todo-mvp-loader.png)
+* Repository의 interface 정의
+* LoadImageCallback을 통해서 성공했을 때와 오류 났을 때를 구분하여 Listener을 추가합니다.
+* RxJava를 사용할 때는 다음이 필요치 않습니다.
+~~~kotlin
+interface ImageSource {
+
+    interface LoadImageCallback {
+        fun onImageLoaded(photoItems: List<PhotoItem> )
+        fun onDataNotAvailable()
+        fun onLoadFail(code: Int, message: String)
+    }
+
+    fun getImageItems(page: Int, loadImageCallback: LoadImageCallback)
+}
+~~~
+* Source 상속받아서 Repository와 Remote/Local DataSource 구분을 하면 됩니다.
+## Repository
+* Repository은 싱글톤을 통해서 생성하면 됩니다.
+* 생성자를 통해 Remote/Local DataSource 생성을 하여 사용할 수 있습니다.
+* kotlin에서는 object class 생성을 처리할 수 있습니다.
+~~~kotlin
+object ImageRepository: ImageSource {
+
+    lateinit var imageRemoteDataSource: ImageRemoteDataSource
+
+    lateinit var imageSampleRepository: ImageRepository
+
+    fun getInstance(): ImageRepository {
+        if (imageSampleRepository == null) {
+            imageSampleRepository = ImageRepository()
+        }
+        return imageSampleRepository
+    }
+
+    private fun ImageRepository() {
+        imageRemoteDataSource = ImageRemoteDataSource.getInstance();
+    }
+
+    override fun getImageItems(page: Int,  loadImageCallback: LoadImageCallback) {
+        imageRemoteDataSource.getImageItems(page, loadImageCallback);
+    }
+}
+~~~
+## Remote/Local DataSource
+* 서버/로컬 데이터 소스를 정의할 수 있습니다.
+* 여기에서는 Local SQLite/Realm DB를 사용하여 구성할 수 있고, Retrofit을 사용하여 서버 데이터를 불러올 수 있습니다.
+* 역시 DataSource interface 상속을 통해서 정리하면 됩니다.
+
+~~~kotlin
+class ImageRemoteDataSource: ImageSource {
+
+    private lateinit var ImageRemoteDataSource INSTANCE
+
+    lateinit var flickrService: FlickrService
+
+    private fun ImageRemoteDataSource() {
+        flickrService = RetrofitCreator.createRetrofit().create(FlickrService.class);
+    }
+
+    fun getInstance(): ImageRemoteDataSource {
+        if (INSTANCE == null) {
+            INSTANCE = ImageRemoteDataSource();
+        }
+
+        return INSTANCE;
+    }
+
+    override fun getImageItems(page: Int, loadImageCallback: LoadImageCallback) {
+      // 생략
+    }
+}
+~~~
+## About Repository
+* Repository 정의는 Memory cache를 할 수 있으며, Remote/Local 데이터를 불러오게 됩니다.
+* sqlite 사용 시에는 Loaders 사용으로 비동기식 데이터를 쉽게 로드할 수 있는 방법을 사용하고, RxJava 등의 방법을 사용할 수 있습니다.
+
+* 기존에 작성한 SampleImageData.kt를 이용하여 Repository 형태로 변경합니다.
+* 변경할 Repository 형태는 구글이 설명하는 다음의 방법입니다.
+![Repository](https://thdev.tech/images/posts/2017/01/Android-MVP-Google-Architecture-Model/model.png)
