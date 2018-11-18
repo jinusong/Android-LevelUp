@@ -278,7 +278,7 @@ class SamplePresenter : SampleContract.Presenter {
 ~~~kotlin
 class SampleActivity : AppCompatActivity(), SampleContract.View {
 
-	private var presenter: SampleContract.Presenter
+	private lateinit var presenter: SampleContract.Presenter
 
 	override fun onCreate(savedInstanceState: Bundle) {
 		super.onCreate(savedInstanceState)
