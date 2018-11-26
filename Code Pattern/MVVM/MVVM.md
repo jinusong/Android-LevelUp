@@ -130,4 +130,4 @@ class MainViewModel {
 * 문제를 최소화 하기 위해 Databinding 을 함께 써야만 그 진가가 발휘됨을 꼭 명심해야 합니다.
 
 ## 참고 링크
-*  https://medium.com/@jsuch2362/android-에서-mvvm-으로-긴-여정을-82494151f312
+* MVVM은 모두 https://medium.com/@jsuch2362 이분의 블로그를 바탕으로 작성되었습니다.
