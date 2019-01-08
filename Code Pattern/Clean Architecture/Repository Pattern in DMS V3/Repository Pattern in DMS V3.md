@@ -309,9 +309,6 @@ class FactoryViewModel(private val creators: Map<Class<out ViewModel>, Provider<
 }
 ~~~
 * 위 코드는 ViewModel Factory 입니다.
-~~~kotlin
-
-~~~
 * 뷰 모델은 이러한 Fragment 또는 Activity와 같은 특정 UI 요소에 대한 데이터를 제공하고, 
 * 이러한 데이터를 로드하기 위해 다른 구성 요소를 호출 또는 사용자 수정을 전송 등의 데이터 처리의 비즈니스 부분과의 통신을 처리합니다.
 * 그리고 ViewModel은 View에 대해 알지 못하고 회전으로 인해 Activity 재작성과 같은 변경에 영향을 받지 않습니다.
