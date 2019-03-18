@@ -13,6 +13,7 @@
 
 * Entity: 데이터베이스의 테이블을 표현합니다.
 * DAO: 데이터베이스에 접속하기 위한 메소드를 포함합니다.
+* RoomDatabase: 데이터베이스를 생성하거나 버전을 관리합니다.
 
 ## 데이터베이스 환경설정 샘플 코드
 * User.kt
@@ -30,20 +31,21 @@ data class User (
 
 * UserDao.kt
 ~~~kotlin
+@Dao
 interface UserDao {
     @Query("SELECT * FROM user")
     fun getAll(): List<User>
 
     @Query("SELECT * FROM user WHERE uid IN (:userIds)")
-    fun loadAllByIds(userIds: Array<Int>): List<User>
+    fun loadAllByIds(vararg userIds: Int): List<User>
 
     @Query("SELECT * FROM user WHERE first_name LIKE :first AND " + "last_name LIKE :last LIMIT 1")
-    fun findByName(first: String, last: String): User
+    fun findByName(vararg first: String, vararg last: String): User
 
     @Insert
-    fun insertAll(users: User...)
+    fun insertAll(vararg users: User...)
     @Delete
-    fun delete(user: User)
+    fun delete(vararg user: User)
 }
 ~~~
 
@@ -221,13 +223,223 @@ data class User (
 @Dao
 interface MyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertUsers(users: User..)
+    fun insertUsers(vararg users: User..)
     @Insert
-    fun insertBothUsers(user1: User, user2: User)
+    fun insertBothUsers(vararg user1: User, user2: User)
     @Insert
-    fun insertUsersAndFriends(user: User, friends: List<User>)
+    fun insertUsersAndFriends(vararg user: User, vararg friends: List<User>)
 }
 ~~~
 
 * 만약 @Insert 메소드가 하나의 파라미터만 받는다면, 삽입한 데이터에 대한 long형 rowld를 리턴받을 수 있습니다.
 * 만약 파라미터가 여러개라면 List<Long>으로 대신 리턴 받을 수 있습니다.
+
+### Update
+* Update를 통해 주어진 파라미터로부터 여러 Entity들을 수정할 수 있습니다. 이는 각 Entity의 기본키에 대해 일치하는 경우 사용됩니다.
+
+~~~kotlin
+@Dao
+interface MyDao{
+    @Update
+    fun updateUsers(vararg users: User ...)
+}
+~~~
+* 보통 필요하지는 않지만, 이메소드의 대한 반환형은 Int인데, 반환값은 수정된 행의 갯수를 알려줍니다.
+
+### Delete
+* 주어진 파라미터로부터 Entity들을 지워주는 메소드, Entity를 찾아 삭제하기 위해서 기본키를 사용합니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Delete
+    fun deleteUsers(vararg users: User ...)
+}
+~~~
+* 이 메소드 또한 몇개의 행이 지워졌는지 int형 반환값으로 알려줍니다.
+
+## Query 해보기
+* @Query는 DAO에서 중요한 어노테이션입니다. 읽기/쓰기를 이 어노테이션으로 모두 가능합니다.
+* 각 @Query 메소드는 컴파일 시간에 알맞은 쿼리인지 입증하게 되고 문제가 있을 시에는 컴파일 에러가 발생합니다.
+* Room은 또한 쿼리에 대한 반환값을 확인합니다. 
+* 반환되는 객체의 필드의 이름이 만약에 대응되는 컬럼이름이 질의응답에서 일치하지 않는다면 Room은 다음과 같이 두가지 방법중 하나로 알림을 줄 것입니다.
+    * 몇몇의 필드명만 일치하는 경우에는 경고 발생
+    * 일치하지 않는 필드명이 있을 시 에러 발생
+
+## 간단한 쿼리
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT * FROM user")
+    fun loadAllUsers(): ArrayList<User>
+}
+~~~
+
+* 매우 간단한 쿼리로 모든 사용자 목록을 불러 올 수 있습니다. 
+* 컴파일시간에 Room은 User테이블에 있는 모든 컬럼을 쿼리하는 것을 알게 됩니다.
+* 쿼리가 문법 오류를 포함하고 있거나 user 테이블이 존재하지 않는다면 Room은 적당한 에러메시지를 컴파일 시간에 알려줍니다.
+
+## 쿼리에 파라미터 넘기기
+* 대부분의 경우 쿼리에 파라미터를 넘겨 filter를 하고 싶을 때가 있습니다.
+* 예를 들면 사용자를 쿼리하는데 특정 숫자보다 나이가 많은 사람을 표현한다거나 할 때입니다.
+* 이러한 작업을 수행하기 위해서는 메소드에 인자값을 어노테이션에서 이용해야 합니다.
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT * FROM user WHERE age > :minAge")
+    fun loadAllUsersOlderThan(vararg minAge: Int): ArrayList<User>
+}
+~~~
+
+* 쿼리가 컴파일 시간이 처리될 때, Room은 바인드 인자값인 :minAge를 메소드의 매개변수인 minAge와 일치 시킵니다.
+* 만약 일치 하지 않는다면 컴파일 시간에 에러를 발생시킵니다. 복수개의 파라미터를 사용할 수도 있습니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT * FROM user WHERE age BETWEEN :minAge AND :maxAge")
+    fun loadAllUsersBetweenAges(vararg minAge: Int, vararg maxAge: Int)
+    @Query("SELECT * FROM user WHERE first_name  LIKE :search")
+    fun findUserWithName(vararg search: String): List<User>
+}
+~~~
+
+## 컬럼의 부분집합 반환하기
+* 개발자는 대부분 몇몇 필드만 엔티티로부터 얻으려고 합니다. 예를 들면 사용자의 모든 정보를 다 보여주기보다는 성이나 이름같은 정보입니다.
+* 앱내의 UI에서 몇몇의 컬럼만 가져오는 것만으로 리소스 사용을 줄일 수 있습니다. 쿼리시간도 줄어듭니다.
+* Room은 Query할 때 반환값이 컬럼들의 부분 집합인 이상 어떠한 오브젝트도 리턴할 수 있습니다.
+* 예를 들면 POJO를 만들고 사용자의 성과 이름만 받는 클래스를 만들 수도 있습니다.
+
+~~~kotlin
+data class NameTuple (
+    @ColumnInfo(name="first_name")
+    var firstName: String,
+    @ColumnInfo(name="last_name")
+    var lastName: String
+)
+~~~
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT first_name, last_name FROM user")
+    fun loadFullName(): List<NameTuple>
+}
+~~~
+* Room은 @ColumnInfo에 필드명만 적어줘도 알아서 척척 매필이 됩니다.
+
+## Collection인자 넘기기
+* 몇몇 쿼리들은 런타임까지는 정확한 파라미터갯수는 모르지만 다양한 갯수의 파라미터를 필요로 하는 경우가 있습니다.
+* 예를 들면, 특정지역들의 부분집합으로부터 모든 사용자에 대한 정보를 필요로 하는 경우를 생각합니다. 
+* Room은 스마트하게도 런타임시에 이러한 collection 파라미터 사이즈에 맞추어 파리미터 갯수를 자동으로 확장시킵니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT first_name, last_name FROM user WHERE region IN (:regions)")
+    fun loadUsersFromRegions(vararg regions: String): List<NameTuple>
+}
+~~~
+
+## Observable 쿼리
+* 쿼리를 요청할 때 보통 데이터의 변경에 따라 APP의 UI도 같이 자동으로 갱신되길 원합니다.
+* 이것을 하려면 LiveData를 리턴값으로 같는 쿼리를 메소드에 정의해줘야 합니다.
+* Room은 database가 업데이트됨에 따라 LiveData의 data도 변경될 수 있도록 코드를 자동으로 생성할 것입니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT first_name, last_name FROM user WHERE region IN(:regions")
+    fun loadUsersFromRegions(vararg regions: String): LiveData<List<User>>
+}
+~~~
+
+## RxJava와 함께하는 반응형 쿼리
+* Room은 RxJava2의 Publisher나 Flowable 타입으로 리턴값을 가질 수 있습니다. 이 기능들을 사용하기 위해서는 android.arch.persistence.room:rxjava2 아티팩트를 Room Group에 의존성을 추가해줘야 합니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT * FROM user WHERE id = :id LIMIT 1")
+    fun loadUserById(vararg id: Int): Flowable<User>
+}
+~~~
+
+## Cursor를 통한 직접적인 접근
+* 만약 직접적인 접근이 필요하다면 Cursor 객체를 사용할 수 있습니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT * FROM user WHERE age > :minAge LIMIT 5")
+    fun loadRawUsersOlderThan(vararg minAge: Int): Cursor
+}
+~~~
+* **주의: Caution: Cursor API를 사용하는것은 별로 추천하지 않는 방법입니다.**
+* **행들이 존재하는지 어떤값이 행에 포함된것인지 보장하지 않습니다. 이미 cursor와 관련된 만들어진 코드가 있거나 리팩토링이 힘든 경우가 사용하시길 바랍니다.**
+
+## 다중 테이블 쿼리하기
+* 몇몇 쿼리들은 여러 테이블들에 접근하여 계산된 결과를 필요로 합니다. Room은 테이블을 Join하여 쿼리 작성하는 것을 허용합니다.
+* Flowable이나 LiveData같은 Observable 데이터 타입으로 반환된다면 Room은 쿼리에서 무효성을 위해 연관된 모든 테이블을 감지합니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT * FROM book "
+            + "INNER JOIN loan ON loan.book_id = book.id "
+            + "INNER JOIN user ON user.id = loan.user_id "
+            + WHERE user.name LIKE : userName)
+        
+    fun findBooksBorrowedByNameSync(vararg userName: String): List<Book>
+}
+~~~
+
+* 이러한 쿼리들로부터 POJO를 반환할 수 있습니다.
+
+~~~kotlin
+@Dao
+interface MyDao {
+    @Query("SELECT user.name AS userName, pet.name AS petName "
+            + "FROM user, pet "
+            + "WHERE user.id = pet.user_id")
+    fun loadUserAndPetNames(): LiveData<List<UserPet>>
+
+    @JVMStatic
+    class UserPet {
+        var userName: String
+        var petName: String
+    }
+}
+~~~
+
+## 룸 데이터베이스(Room Database)
+* 룸 데이터베이스에서 데이터베이스를 생성하거나 버전을 관리합니다.
+
+~~~kotlin
+@Database(entities = arrayOf(Person::class), version = 1)
+abstract class PersonDatabase: RoomDatabase() {
+
+    abstract fun getPersonDao(): PersonDao
+
+    companion object {
+
+        private var INSTANCE: PersonDatabase? = null
+
+        fun getInstance(context: Context): PersonDatabase? {
+
+            if(INSTANCE == null) {
+                synchronized(PersonDatabase::class) {
+                    INSTANCE = Room.databaseBuilder(
+                            context,
+                            PersonDatabase::class.java,
+                            "person.db")
+                            .build()
+                }
+            }
+            return INSTANCE
+        }
+
+    }
+
+}
+~~~

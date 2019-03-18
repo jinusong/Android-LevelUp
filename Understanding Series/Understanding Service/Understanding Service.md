@@ -179,7 +179,7 @@ var mReceiver = BroadcastReceiver(){
         if(FibService.ACTION_CALC_DONE == action){
             var result: Int = intent.getIntExtra(FibService.KEY_CALC_RESULT, -1)
             var msec: Long = intent.getLongExtra(FibService.KEY_CALC_MILLIECONDS, -2)
-            // 결과 표사ㅣ
+            // 결과 표시
             mTextView.setText("fib(" + FibService.N + ") = " + result + "(" + msec + ") 밀리초")
         }
     }
