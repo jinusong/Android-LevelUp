@@ -183,13 +183,236 @@ data class Kitchen (
 ~~~
 * 주방에서는 주문을 받았는지 여부를 파악하여 Boolean 값을 리턴하는 함수인 isOrder()이 있습니다.
 
-#### 모듈을 만듭니다.
+#### 2.모듈을 만듭니다.
 ~~~kotlin
 @Module
 class ChefModule {
     @Provides
-    fun provideChef(): Chef {
-        return Chef("Black", "Jin")
+    fun provideChef(): Chef = Chef("Black", "Jin")
+}
+~~~
+
+~~~kotlin
+@Module
+class KitchenModule {
+
+    @Provides
+    fun provideIsOrder(chef: Chef, @Named("course1") order: String) = Kitchen(chef, order)
+
+    @Provides
+    @Named("course1")
+    fun provideCourse1(): String = "한식"
+
+    @Provides
+    @Named("course2")
+    fun provideCourse2() = "중식"
+~~~
+
+* 2개의 모듈을 만들었습니다.
+* 특히 KitchenModule에서는 @Provides로 공급할 때 Named를 공급 객체를 구분할 수 있습니다. 코스요리1과 코스요리2로 2가지 Named를 설정하였습니다.
+
+#### 3.컴포넌트
+~~~kotlin
+@Component(modules = {ChefModule.class, KitchenModule.class})
+interface MyComponent {
+    fun inject(activity: MainActivity)
+}
+~~~
+* 2개의 모듈을 주입할 곳은 MainActivity입니다.
+
+
+#### 4.MainActivity
+~~~kotlin
+class MainActivity(): AppCompatActivity() {
+    @Inject
+    lateinit var kitchen: Kitchen
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        val myComponent = DaggerMyComponent.builder().build()
+        myComponent.inject(this)
+
+        isOrder()
+    }
+
+    private fun isOrder() {
+        var isOrder = kitchen.isOrder()
+        if (isOrder) {
+            Log.d("MyTag", "order successful ")
+        } else {
+            Log.d("MyTag", "order failed")
+        }
     }
 }
 ~~~
+
+* 1) 주입 받는 친구 Kitchen을 변수에 선언하였습니다.
+* 2) Component를 build하게 되면 kitchen에 자동으로 객체가 주입됩니다.
+* 3) KitchenModule에서 course1(한식)을 주입했으므로 BlackJin 셰프가 한식 요리를 하게 됩니다.
+
+## SharedPref 사용해보자.
+* 기존에는 ShardPref를 다음과 같이 사용했습니다.
+
+~~~kotlin
+class MainActivity(): AppCompatActivity() {
+    private lateinit sharedPreferences: SharedPreferences
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
+        sharedPreferences.edit().putString("status", "sucess!").apply()
+
+        Log.d("MyTag", "get : " + sharedPreferences.getString("status", null))
+    }
+}
+~~~
+
+* Dagger2를 사용해볼까요?
+
+### 1.Application
+~~~kotlin
+@Module
+class ApplicationModule(val app: Application) {
+    @Provides
+    @Singleton
+    fun provieSharedPrefs(): SharedPreferences 
+        = PreferenceManager.getDefaultSharedPreferences(app)
+}
+~~~
+* 위와 같이 모듈을 만들어 줍니다. 
+* SharedPreferences는 같은 객체 1개만 있으면 되기 때문에 @Singleton 어노테이션을 설정했습니다.
+
+### 2.ApplicatinComponent
+~~~kotlin
+@Singleton
+@Component(modules = ApplicationModule.class)
+interface ApplicationComponent {
+    fun inject(activity: MainActivity)
+}
+~~~
+* MainActivity에 sharedPref를 주입할 예정입니다.
+
+### 3.DemoApplication
+~~~kotlin
+class DemoApplication: Application() {
+
+    private lateinit mComponent: ApplicationComponent
+
+    override fun onCreate() {
+        super.onCreate()
+
+        mComponent = DaggerApplicationComponent.builder().applicationModule(ApplicationModule(this)).build()
+    }
+
+    fun getComponent(): ApplicationComponent = mComponent
+}
+~~~
+* Application 단계에서 component를 최초 초기화 해줍니다.
+* 이렇게 해줌으로써 Module에서 제공하는 SharedPref를 최초 한번 초기화 해줄 수 있습니다.
+* 그럼 이 초기화 한 SharedPref를 어떻게 공급할 수 있을까요?
+
+### 4.MainActivity
+~~~kotlin
+class MainActivity(): AppCompatActivity() {
+
+    @Inject
+    lateinit var mSharedPrefs: SharedPreferences
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        (getApplication() as DemoApplication).getComponent().inject(this)
+
+        mSharedPrefs.edit()
+                .putString("status", "success!")
+                .apply()
+
+        Log.d("MyTag", "getString : " + mSharedPrefs.getString("status", "null"))
+    }
+}
+~~~
+* Application 단계에서 최초 초기화한 Component 객체에 MainActivity로 SharedPref를 주입하라는 로직을 작성합니다.
+~~~kotlin
+(getApplication() as DemoApplication)
+            .getComponent()
+            .inject(this)
+~~~
+* 그렇게 하면 변수로 선언한
+
+~~~kotlin
+@Inject
+lateinit var mSharedPrefs: SharedPreferences
+~~~
+* mSharedPrefs에 자동으로 객체가 주입되어 사용할 수 있게 됩니다.
+* 로그를 확인하면 success!를 확인할 수 있습니다.
+
+## Named 어노테이션을 사용하여 SharedPref를 분리해서 사용하기
+### 1.ApplicationModule
+~~~kotlin
+@Module
+class ApplicationModule(val app: Application) {
+
+    @Provides
+    @Singleton
+    @Named("default")
+    fun provideDefaultSharedPrefs()
+        = PreferenceManager.getDefaultSharedPreferences(app)
+    
+    @Provides
+    @Singleton
+    @Named("secret")
+    fun provideSecretSharedPrefs()
+        = app.getSharedPreferences("secret", Activity.MODE_PRIVATE)
+}
+~~~
+* ApplicationModule 단계에서 default와 secret의 두가지 종류의 SharedPref를 초기화 해줍니다.
+
+### 2.MainActivity
+~~~kotlin
+class MainActivity(): AppCompatActivity() {
+    @Inject
+    @Named("default")
+    lateinit var mDefaultSharedPrefs: SharedPreferences
+
+    @Inject
+    @Named("secret")
+    lateinit var mSecretSharedPrefs: SharedPreferences
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        (getApplication() as DemoApplication)
+                .getComponent()
+                .inject(this)
+        
+        mDefaultSharedPrefs.edit()
+                .putString("status", "success!")
+                .apply()
+
+        mSecretSharedPrefs.edit()
+                .putString("status", "another success!")
+                .apply()
+
+        Log.d("MyTag", "getString : " + mDefaultSharedPref.getString("status", "null"))
+        Log.d("MyTag", "getString : " + mSecretSharedPrefs.getString("status", "null"))
+    }
+}
+~~~
+
+* Component를 불러와 MainActivity에서 선언한
+~~~kotlin
+@Inject
+@Named("default")
+lateinit var mDefaultSharedPrefs: SharedPreferences
+
+@Inject
+@Named("secret")
+lateinit var mSecretSharedPrefs: SharedPreferences
+~~~
+* 위 두 변수에 객체를 주입해 줍니다. 이때 Named 를 통해 각기 다른 객체를 주입해 줄 수 있습니다.
