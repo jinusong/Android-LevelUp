@@ -40,7 +40,7 @@
 
 ## Jetpack
 * [Jetpack]
-* Google I/O에서 소개된 Jetpack애 대해 다룹니다.
+* Google I/O에서 소개된 Jetpack에 대해 다룹니다.
 
 
 [Understanding Series]: https://github.com/jinusong/Android-LevelUp/tree/master/Understanding%20Series
